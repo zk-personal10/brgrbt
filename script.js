@@ -17,9 +17,9 @@
   const clearTimers = () => { timers.forEach(clearTimeout); timers.clear(); };
 
   let cur = -1, step = 0, busy = false, pending = null;
+  const idOf = () => (slides[cur] ? slides[cur].dataset.id : '');
 
   /* ---------- preparation ---------- */
-  // split headings into masked words
   $$('[data-split]').forEach(el => {
     const label = el.getAttribute('aria-label') || el.textContent.trim();
     el.setAttribute('aria-label', label);
@@ -27,19 +27,14 @@
     el.innerHTML = label.split(/\s+/).map((w, i) =>
       `<span class="w" aria-hidden="true"><span class="wi" style="--i:${i}">${w}</span></span>` + (br.includes(i + 1) ? '<br>' : ' ')).join('');
   });
-  // indices for staggered CSS
-  const indexKids = (sel, prop = '--k') => $$(sel).forEach((el, i) => el.style.setProperty(prop, i));
-  indexKids('.swatches .sw', '--k');
   slides.forEach(sl => {
     $$('.pin-dot', sl).forEach((e, i) => e.style.setProperty('--k', i));
     $$('.cal i', sl).forEach((e, i) => e.style.setProperty('--k', i));
+    $$('.rv', sl).forEach((el, i) => { if (!el.style.getPropertyValue('--d')) el.style.setProperty('--d', (0.55 + i * 0.11).toFixed(2) + 's'); });
   });
-  $$('.mgroup').forEach(g => $$('.mock', g).forEach((m, i) => { m.style.setProperty('--k', i); m.style.setProperty('--r', (i % 2 ? 2 : -2) + 'deg'); }));
-  // auto stagger for generic reveals
-  slides.forEach(sl => $$('.rv', sl).forEach((el, i) => { if (!el.style.getPropertyValue('--d')) el.style.setProperty('--d', (0.55 + i * 0.11).toFixed(2) + 's'); }));
-  $$('.s2 .wi').forEach(el => el.style.setProperty('--d0', '.5s'));
+  $$('.apps-wall figure').forEach((f, i) => f.style.setProperty('--k', i));
+  $$('.s-idea .wi, .s-terr .wi').forEach(el => el.style.setProperty('--d0', '.5s'));
 
-  // progress bar
   const bar = $('#bar');
   slides.forEach((s, i) => {
     const b = document.createElement('button');
@@ -59,7 +54,7 @@
     let maxW = 1, weight = 0;
     lines.forEach(l => {
       const kids = [...l.children].filter(k => getComputedStyle(k).position !== 'absolute');
-      if (kids.length > 1) { // composite line (Boring? / Not here.)
+      if (kids.length > 1) {
         const r = kids.map(k => k.getBoundingClientRect());
         maxW = Math.max(maxW, Math.max(...r.map(x => x.right)) - Math.min(...r.map(x => x.left)));
         weight += .72;
@@ -103,7 +98,7 @@
 
   // 02 — the idea: statement, then spotlight builds
   const ZONES = [null, [0, 0, 100, 100], [10, 11, 80, 31], [9, 38, 82, 27], [14, 60, 74, 31], [0, 0, 100, 100]];
-  H.s2 = {
+  H.idea = {
     step(sl, k) {
       sl.classList.toggle('view', k >= 1);
       const sp = $('.spotlight', sl), z = ZONES[k];
@@ -116,7 +111,7 @@
   };
 
   // 03 — anatomy
-  H.s3 = {
+  H.anat = {
     step(sl, k) {
       $$('.pin-dot,.anat-list li', sl).forEach(e => e.classList.toggle('on', +e.dataset.k === k));
       $('.bracket', sl).classList.toggle('on', k === 4);
@@ -124,12 +119,12 @@
   };
 
   // 04 — personality: auto-played kinetic sequence
-  H.s4 = {
+  H.pers = {
     step(sl, k) { if (k === 0) { $$('.pw', sl).forEach(e => e.classList.remove('on')); $('.boring', sl).classList.remove('on', 'struck'); } },
     enter(sl) {
       const words = $$('.pw', sl), boring = $('.boring', sl);
       if (RM) { words.forEach(w => w.classList.add('on')); boring.classList.add('on', 'struck'); return; }
-      const t0 = 700, gap = 560;
+      const t0 = 700, gap = 520;
       words.forEach((w, i) => later(() => w.classList.add('on'), t0 + i * gap));
       later(() => boring.classList.add('on'), t0 + words.length * gap + 500);
       later(() => boring.classList.add('struck'), t0 + words.length * gap + 1500);
@@ -137,21 +132,27 @@
     leave() { clearTimers(); }
   };
 
-  // 05 — colour: swatches, then full-viewport takeovers
-  H.s5 = {
+  // 05 — colour: two palettes, then each colour takes over, then the full system
+  H.color = {
     step(sl, k) {
       const ps = $$('.cpanel', sl);
-      ps.forEach((p, i) => p.classList.toggle('on', i < k));
+      ps.forEach((p, i) => p.classList.toggle('on', i < Math.min(k, ps.length)));
       sl.classList.toggle('take', k > 0);
-      if (k > 0) setTone(ps[k - 1].dataset.tone); else setTone(sl.dataset.tone);
+      sl.classList.toggle('sys', k >= 5);
+      if (k >= 5) setTone('light');
+      else if (k > 0) setTone(ps[k - 1].dataset.tone);
+      else setTone(sl.dataset.tone);
     }
   };
 
-  // 06 — slogan
-  H.s6 = { step(sl, k) { sl.classList.toggle('b2', k >= 1); } };
+  // 06 — territory
+  H.terr = { step(sl, k) { sl.classList.toggle('view', k >= 1); } };
 
-  // 07 — count-up
-  H.s7 = {
+  // 07 — slogan
+  H.slogan = { step(sl, k) { sl.classList.toggle('b2', k >= 1); sl.classList.toggle('b3', k >= 2); } };
+
+  // 08 — why it works: count-up
+  H.why = {
     enter(sl) {
       $$('.count', sl).forEach(el => {
         const to = +el.dataset.to, dec = +el.dataset.dec || 0;
@@ -160,7 +161,7 @@
         const tick = now => {
           const p = clamp((now - t0) / dur, 0, 1);
           el.textContent = (to * (1 - Math.pow(1 - p, 3))).toFixed(dec);
-          if (p < 1 && cur === 6) requestAnimationFrame(tick);
+          if (p < 1 && idOf() === 'why') requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       });
@@ -168,21 +169,28 @@
     step(sl) { $$('.count', sl).forEach(el => { el.textContent = (0).toFixed(+el.dataset.dec || 0); }); }
   };
 
-  // 08 — real world, one category per build
-  H.s8 = {
+  // 09 — the brand in the world: eight applications, then the eight together, then all twenty-six
+  const APP_BG = [['#24211E', '#F3E4C8', 'dark'], ['#6F8F3D', '#24211E', 'light'], ['#F3E4C8', '#24211E', 'light'], ['#E76F2E', '#24211E', 'light'],
+                  ['#24211E', '#F3E4C8', 'dark'], ['#6F8F3D', '#24211E', 'light'], ['#F3E4C8', '#24211E', 'light'], ['#E76F2E', '#24211E', 'light']];
+  H.apps = {
     step(sl, k) {
-      $$('.mgroup', sl).forEach(g => g.classList.toggle('on', +g.dataset.k === k));
-      $$('.chip', sl).forEach(c => c.classList.toggle('on', +c.dataset.k === k));
+      $$('.frame', sl).forEach((f, i) => { f.classList.toggle('on', i === k); f.classList.toggle('past', i < k || k >= 8); });
+      $$('.atext', sl).forEach((t, i) => t.classList.toggle('on', i === k));
+      sl.classList.toggle('g', k === 8);
+      sl.classList.toggle('w', k === 9);
+      const c = APP_BG[k] || ['#24211E', '#F3E4C8', 'dark'];
+      sl.style.setProperty('--bg', c[0]);
+      sl.style.setProperty('--fg', c[1]);
+      setTone(c[2]);
     }
   };
-  $$('.chip').forEach(c => c.addEventListener('click', () => { if (cur === 7) setStep(+c.dataset.k); }));
 
-  // 10 — scale test
+  // 12 — scale test
   const scObj = $('#scObj'), scImg = $('#scaleLogo'), scName = $('#scName'), scSize = $('#scSize'), rail = $('#rail');
   const NAMES = ['Billboard', 'Store sign', 'Packaging', 'Phone icon', 'Favicon'];
-  const SRC = { l: 'assets/burger-bite-logo-1024.png', m: 'assets/burger-bite-logo-512.png', s: 'assets/burger-bite-logo-256.png' };
+  const SRC = { l: 'assets/logos/transparent-logo-1024.png', m: 'assets/logos/transparent-logo-512.png', s: 'assets/logos/transparent-logo-256.png' };
   Object.values(SRC).forEach(u => { const i = new Image(); i.src = u; });
-  let scW = 0, scB = 0, scRaf = 0;
+  let scW = 0, scRaf = 0, settleT = 0;
   const pick = w => (w > 360 ? SRC.l : w > 150 ? SRC.m : SRC.s);
   const baseSize = () => Math.min(innerHeight, innerWidth) * 1.12;
   function widths() {
@@ -192,9 +200,7 @@
   function noT(on) { scObj.classList.toggle('no-t', on); }
   function scaleTo(i, instant) {
     const w = widths()[i], B = baseSize();
-    cancelAnimationFrame(scRaf);
-    later.cancelSettle && later.cancelSettle();
-    // un-settle: back to the large base so we can animate by transform
+    cancelAnimationFrame(scRaf); clearTimeout(settleT);
     noT(true);
     scObj.style.fontSize = B + 'px';
     scImg.src = SRC.l;
@@ -203,7 +209,6 @@
     noT(false);
     if (instant || RM) { noT(true); scObj.style.setProperty('--s', w / B); void scObj.offsetWidth; noT(false); }
     else scObj.style.setProperty('--s', w / B);
-    // readout counts toward the new size
     const from = scW || B, t0 = performance.now(), dur = instant || RM ? 1 : 1200;
     const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     const tick = now => {
@@ -212,10 +217,9 @@
       if (p < 1) scRaf = requestAnimationFrame(tick);
     };
     scRaf = requestAnimationFrame(tick);
-    scW = w; scB = B;
-    // settle on a crisp, natively sized render once the move ends
-    const t = setTimeout(() => {
-      if (cur !== 9) return;
+    scW = w;
+    settleT = setTimeout(() => {
+      if (idOf() !== 'scale') return;
       noT(true);
       scObj.style.fontSize = w + 'px';
       scObj.style.setProperty('--s', 1);
@@ -223,9 +227,8 @@
       void scObj.offsetWidth;
       noT(false);
     }, instant || RM ? 30 : 1300);
-    later.cancelSettle = () => clearTimeout(t);
   }
-  H.s10 = {
+  H.scale = {
     step(sl, k, prev, instant) {
       sl.dataset.i = k;
       if (scName.textContent !== NAMES[k]) {
@@ -235,33 +238,19 @@
       $$('button', rail).forEach(b => b.classList.toggle('on', +b.dataset.i === k));
       scaleTo(k, instant);
     },
-    leave() { cancelAnimationFrame(scRaf); later.cancelSettle && later.cancelSettle(); scW = 0; }
+    leave() { cancelAnimationFrame(scRaf); clearTimeout(settleT); scW = 0; }
   };
-  rail.addEventListener('click', e => { const b = e.target.closest('button'); if (b && cur === 9) setStep(+b.dataset.i); });
+  rail.addEventListener('click', e => { const b = e.target.closest('button'); if (b && idOf() === 'scale') setStep(+b.dataset.i); });
 
-  // 11 — finale
+  // 13 — finale
   const fin = $('#finLogo');
   function chomp() { fin.classList.remove('chomp'); void fin.offsetWidth; fin.classList.add('chomp'); }
   fin.addEventListener('click', chomp);
-  H.s11 = {
+  H.finale = {
     enter() { later(chomp, RM ? 0 : 4300); },
     leave() { fin.classList.remove('chomp'); }
   };
   $('#replay').addEventListener('click', () => go(0, 0));
-
-  // swatch copy
-  const toast = $('#toast');
-  $('#swatches').addEventListener('click', async e => {
-    const b = e.target.closest('.sw'); if (!b) return;
-    const hex = b.dataset.hex;
-    try { await navigator.clipboard.writeText(hex); } catch (_) {
-      const ta = document.createElement('textarea'); ta.value = hex; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); } catch (__) {} ta.remove();
-    }
-    toast.textContent = hex + ' copied';
-    toast.classList.add('on');
-    clearTimeout(toast._t); toast._t = setTimeout(() => toast.classList.remove('on'), 1600);
-  });
 
   /* ---------- slide transitions ---------- */
   const T = {
@@ -345,8 +334,10 @@
     hud();
   }
 
-  const next = () => { if (busy) { pending = cur + 1 < N ? [cur + 1, 0] : null; if (step < stepsOf[cur] - 1) { pending = null; setStep(step + 1); } return; }
-    if (step < stepsOf[cur] - 1) setStep(step + 1); else if (cur < N - 1) go(cur + 1, 0); };
+  const next = () => {
+    if (busy) { if (step < stepsOf[cur] - 1) { pending = null; setStep(step + 1); } else if (cur + 1 < N) pending = [cur + 1, 0]; return; }
+    if (step < stepsOf[cur] - 1) setStep(step + 1); else if (cur < N - 1) go(cur + 1, 0);
+  };
   const prev = () => { if (step > 0) setStep(step - 1); else if (cur > 0) go(cur - 1, stepsOf[cur - 1] - 1); };
 
   /* ---------- input ---------- */
@@ -378,9 +369,8 @@
     if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.2 && Date.now() - tt < 900) dx < 0 ? next() : prev();
   }, { passive: true });
   addEventListener('hashchange', () => { const n = parseInt(location.hash.slice(1), 10); if (n >= 1 && n <= N && n - 1 !== cur) go(n - 1, 0); });
-  addEventListener('resize', () => { fitAll(); if (cur === 9) scaleTo(step, true); });
+  addEventListener('resize', () => { fitAll(); if (idOf() === 'scale') scaleTo(step, true); });
 
-  // gentle pointer tilt on the hero / finale logo
   if (matchMedia('(hover:hover)').matches && !RM) {
     addEventListener('pointermove', e => {
       const x = e.clientX / innerWidth - .5, y = e.clientY / innerHeight - .5;
@@ -390,7 +380,7 @@
 
   /* ---------- boot ---------- */
   slides.forEach(s => { s.inert = true; s.setAttribute('aria-hidden', 'true'); });
-  const hero = $('.s1-logo img');
+  const hero = $('.open-logo img');
   const ready = Promise.race([
     Promise.all([document.fonts ? document.fonts.ready : 0, hero.decode ? hero.decode().catch(() => {}) : 0]),
     new Promise(r => setTimeout(r, 1800))
